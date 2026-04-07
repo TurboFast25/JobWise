@@ -13,3 +13,9 @@ Executes application submission as a transactional write
 Maintains a strict state machine for each application (saved → applied → interview → offer/rejected)
 Records all actions as immutable events for auditability
 This design ensures that every application is accurate, non-duplicated, and consistent, even under concurrent requests or retries. By treating the database as the source of record and enforcing invariants at the API level, the system provides a reliable foundation for managing high-volume job searches.
+
+🧍 Contributors
+Erlin:
+Ethan Yang: eyang62@calpoly.edu
+Garrett:
+Sherry:
