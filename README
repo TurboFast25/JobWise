@@ -1,9 +1,9 @@
-💡 Inspiration
+Inspiration
 The modern job application process is fragmented, repetitive, and inefficient. Candidates juggle multiple job boards, duplicate listings, and inconsistent application tracking, often leading to wasted effort and missed opportunities. Most existing tools focus on surface-level organization or autofill convenience, but fail to address the deeper problem: managing applications as a structured, high-stakes workflow under real constraints.
 We were inspired by the idea that applying to jobs should not be a manual, error-prone process, but a coordinated system that enforces correctness and efficiency. Instead of building another tracker, we set out to design a backend that acts as the source of truth for a user’s job search—preventing duplicate applications, enforcing limits, and maintaining a consistent record of every action.
 Our goal was to treat job applications not as static entries, but as dynamic, stateful operations that require reliability, deduplication, and careful orchestration.
 
-⚙️ What It Does
+What It Does
 Our system is an application orchestration API that manages the full lifecycle of job applications, from ingestion to submission to status tracking, while guaranteeing consistency under concurrent usage.
 Rather than acting as a passive tracker, the system operates as a transactional engine:
 Ingests job listings from multiple sources and deduplicates them into a single canonical record
@@ -14,7 +14,7 @@ Maintains a strict state machine for each application (saved → applied → int
 Records all actions as immutable events for auditability
 This design ensures that every application is accurate, non-duplicated, and consistent, even under concurrent requests or retries. By treating the database as the source of record and enforcing invariants at the API level, the system provides a reliable foundation for managing high-volume job searches.
 
-🧍 Contributors
+Contributors
 Ethan Yang: eyang62@calpoly.edu
-Garrett:
+Garrett: gchan28@calpoly.edu
 Sherry:
