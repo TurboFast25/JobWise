@@ -1,18 +1,17 @@
-Inspiration
-The modern job application process is fragmented, repetitive, and inefficient. Candidates juggle multiple job boards, duplicate listings, and inconsistent application tracking, often leading to wasted effort and missed opportunities. Most existing tools focus on surface-level organization or autofill convenience, but fail to address the deeper problem: managing applications as a structured, high-stakes workflow under real constraints.
-We were inspired by the idea that applying to jobs should not be a manual, error-prone process, but a coordinated system that enforces correctness and efficiency. Instead of building another tracker, we set out to design a backend that acts as the source of truth for a user’s job search—preventing duplicate applications, enforcing limits, and maintaining a consistent record of every action.
-Our goal was to treat job applications not as static entries, but as dynamic, stateful operations that require reliability, deduplication, and careful orchestration.
+Inspiration 
+The way people discover and evaluate recipes is broken. Home cooks scroll through endless blog posts padded with life stories, sift through inconsistent ratings on recipe sites, and have no reliable way to know if a recipe is actually worth making before committing time and ingredients. 
+Existing platforms treat all recipes as equal — a five-star rating from someone who substituted half the ingredients sits alongside one from a seasoned cook who followed it precisely. 
+We were inspired by Beli's approach to food reviews — personal, ranked, and social — and asked: what if we applied that same philosophy to recipes? Instead of building another recipe database, we set out to create a platform where your recipe ratings are contextualized, comparable, and connected to the people whose taste you actually trust. 
+Our goal was to treat recipe discovery not as a search problem, but as a social trust network where the opinions that matter most come from people who cook like you and eat like you. 
 
-What It Does
-Our system is an application orchestration API that manages the full lifecycle of job applications, from ingestion to submission to status tracking, while guaranteeing consistency under concurrent usage.
-Rather than acting as a passive tracker, the system operates as a transactional engine:
-Ingests job listings from multiple sources and deduplicates them into a single canonical record
-Evaluates whether a user can apply based on constraints like prior applications and rate limits
-Selects the appropriate resume version and locks it for consistency
-Executes application submission as a transactional write
-Maintains a strict state machine for each application (saved → applied → interview → offer/rejected)
-Records all actions as immutable events for auditability
-This design ensures that every application is accurate, non-duplicated, and consistent, even under concurrent requests or retries. By treating the database as the source of record and enforcing invariants at the API level, the system provides a reliable foundation for managing high-volume job searches.
+What It Does 
+Our system is a social recipe rating and discovery platform that lets users rank, review, and share recipes through a personalized, trust-driven feed. 
+Rather than aggregating anonymous ratings, the platform operates as a taste-aware recommendation engine: 
+Lets users rate recipes on a normalized personal scale, so every rating is relative to their own cooking history 
+Builds a social graph of culinary trust — follow friends, home cooks, or creators whose palates and skill levels align with yours 
+Deduplicates recipes across sources, so the same dish from different blogs or platforms resolves to a single canonical entry Surfaces recommendations ranked by relevance to your taste profile, not by raw popularity 
+Tracks your personal cookbook — what you've made, what you loved, what you'd skip — as a living, searchable record Supports structured reviews capturing dimensions like difficulty, flavor accuracy, ingredient accessibility, and whether the recipe lives up to its photos 
+This design ensures that discovery is personal, ratings are meaningful, and the best recipes rise to the top for the right audience. By anchoring recommendations in real social signal rather than anonymous averages, the platform becomes a reliable guide for deciding what to cook next.
 
 Contributors
 Ethan Yang: eyang62@calpoly.edu
