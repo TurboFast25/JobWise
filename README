@@ -7,11 +7,11 @@ Our goal was to treat recipe discovery not as a search problem, but as a social 
 What It Does 
 Our system is a social recipe rating and discovery platform that lets users rank, review, and share recipes through a personalized, trust-driven feed. 
 Rather than aggregating anonymous ratings, the platform operates as a taste-aware recommendation engine: 
-Lets users rate recipes on a normalized personal scale, so every rating is relative to their own cooking history 
-Builds a social graph of culinary trust — follow friends, home cooks, or creators whose palates and skill levels align with yours 
-Deduplicates recipes across sources, so the same dish from different blogs or platforms resolves to a single canonical entry Surfaces recommendations ranked by relevance to your taste profile, not by raw popularity 
-Tracks your personal cookbook — what you've made, what you loved, what you'd skip — as a living, searchable record Supports structured reviews capturing dimensions like difficulty, flavor accuracy, ingredient accessibility, and whether the recipe lives up to its photos 
-This design ensures that discovery is personal, ratings are meaningful, and the best recipes rise to the top for the right audience. By anchoring recommendations in real social signal rather than anonymous averages, the platform becomes a reliable guide for deciding what to cook next.
+- Lets users rate recipes on a normalized personal scale, so every rating is relative to their own cooking history 
+- Builds a social graph of culinary trust — follow friends, home cooks, or creators whose palates and skill levels align with yours 
+- Deduplicates recipes across sources, so the same dish from different blogs or platforms resolves to a single canonical entry Surfaces recommendations ranked by relevance to your taste profile, not by raw popularity 
+- Tracks your personal cookbook — what you've made, what you loved, what you'd skip — as a living, searchable record Supports structured reviews capturing dimensions like difficulty, flavor accuracy, ingredient accessibility, and whether the recipe lives up to its photos 
+- This design ensures that discovery is personal, ratings are meaningful, and the best recipes rise to the top for the right audience. By anchoring recommendations in real social signal rather than anonymous averages, the platform becomes a reliable guide for deciding what to cook next.
 
 Contributors
 Ethan Yang: eyang62@calpoly.edu
