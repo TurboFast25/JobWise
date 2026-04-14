@@ -8,7 +8,7 @@ Stories
 7. As a professional chef who was recently fired from a restaurant that treated me unfairly, I want to share the secrets of all recipes.
 8. I am currently studying abroad at Omar Bongo University in Gabon. The food I am learning to make here is amazing and I want to share it with my friends and family back home in Azerbaijan.
 9. As a foodie, when I try to rate a recipe but my ranking conflicts with my existing list (e.g., duplicate position), I want the system to prompt me to reorder my rankings, so that my list remains consistent.
-10. As a fan of various celebrity chefs, when I try to follow a chef who does not exist or has no recipes in the system, I want to be notified gracefully, so that I understand why no results are shown.
+10. As a fan of various underground chefs, when I try to follow a chef who does not exist or has no recipes in the system, I want to be notified gracefully, so that I understand why no results are shown.
 11. As a college student, when I try to sort recipes but the system fails to load results, I want to see a fallback list (e.g., trending recipes), so that I can still quickly choose something to cook.
 12. As a user with picky taste, when I apply filters that return no matching recipes, I want the system to suggest similar alternatives, so that I am not left with an empty experience.
 
