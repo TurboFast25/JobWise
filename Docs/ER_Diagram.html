@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recipe Rating System - ER Diagram</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+  #erd {
+    background: #ffffff;
+    width: 100%;
+    max-width: 1200px;
+  }
+  #erd svg {
+    width: 100%;
+    height: auto;
+  }
+  #erd svg rect,
+  #erd svg path,
+  #erd svg line {
+    shape-rendering: crispEdges;
+  }
+  #erd svg text {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body>
+  <h1>Recipe Rating System — ER Diagram</h1>
+  <p class="subtitle">CSC-365 Group Project</p>
+  <div id="erd"></div>
+
+  <script type="module">
+    import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+    await document.fonts.ready;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      er: {
+        layoutDirection: 'TB',
+        entityPadding: 30,
+        minEntityWidth: 160,
+      },
+      themeVariables: {
+        darkMode: false,
+        fontSize: '16px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        lineColor: '#444444',
+        textColor: '#111111',
+        primaryColor: '#eef2ff',
+        primaryBorderColor: '#444444',
+        primaryTextColor: '#111111',
+      },
+    });
+    const { svg } = await mermaid.render('erd-svg', `erDiagram
+    FOLLOWS {
+        int follow_id PK
+        int follower_id FK
+        int followee_id FK
+        float trust_weight
+        timestamp created_at
+    }
+
+    USERS {
+        int user_id PK
+        string username
+        float trust_authority
+        timestamp created_at
+    }
+
+    COOKBOOK_ENTRIES {
+        int entry_id PK
+        int user_id FK
+        int recipe_id FK
+        int personal_rank
+        timestamp added_at
+    }
+
+    REVIEWS {
+        int review_id PK
+        int user_id FK
+        int recipe_id FK
+        float raw_score
+        float z_score
+        text comment
+        timestamp created_at
+    }
+
+    RECIPES {
+        int recipe_id PK
+        string title
+        text instructions
+        boolean is_canonical
+        int canonical_id FK
+        float confidence
+        timestamp created_at
+    }
+
+    INGREDIENTS {
+        int ingredient_id PK
+        int recipe_id FK
+        string name
+        string quantity
+    }
+
+    USERS ||--o{ FOLLOWS : "follows"
+    USERS ||--o{ FOLLOWS : "followed by"
+    USERS ||--o{ COOKBOOK_ENTRIES : "saves"
+    USERS ||--o{ REVIEWS : "submits"
+    RECIPES ||--o{ REVIEWS : "receives"
+    RECIPES ||--o{ COOKBOOK_ENTRIES : "saved in"
+    RECIPES ||--o{ INGREDIENTS : "contains"
+    RECIPES o|--o| RECIPES : "merges into canonical"
+`);
+    document.getElementById('erd').innerHTML = svg;
+
+    document.querySelectorAll('#erd svg .node').forEach(node => {
+      const firstPath = node.querySelector('path[d]');
+      if (!firstPath) return;
+      const d = firstPath.getAttribute('d');
+      const nums = d.match(/-?[\d.]+/g)?.map(Number);
+      if (!nums || nums.length < 8) return;
+      const xs = [nums[0], nums[2], nums[4], nums[6]];
+      const ys = [nums[1], nums[3], nums[5], nums[7]];
+      const x = Math.min(...xs), y = Math.min(...ys);
+      const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x);
+      rect.setAttribute('y', y);
+      rect.setAttribute('width', w);
+      rect.setAttribute('height', h);
+      rect.setAttribute('rx', '8');
+      for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+        if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+      }
+      firstPath.replaceWith(rect);
+    });
+
+    document.querySelectorAll('#erd svg .row-rect-odd path, #erd svg .row-rect-even path').forEach(p => {
+      p.setAttribute('stroke', 'none');
+    });
+  </script>
+</body>
+</html>
