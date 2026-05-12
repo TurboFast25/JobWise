@@ -15,31 +15,42 @@ def get_feed(
     category: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    # Trust score = sum of (trust_weight * z_score) for everyone you follow who reviewed the recipe
+    # Trust score = sum of (trust_weight * z_score) for everyone you follow who reviewed the recipe.
+    # Secondary sort by total review count so that when trust scores are all 0 (new user with no follows),
+    # more popular recipes still bubble up instead of returning in random order.
+    category_clause = "AND LOWER(r.category) = LOWER(:category)" if category else ""
+    params = {"uid": user_id, "limit": limit, "offset": offset}
+    if category:
+        params["category"] = category
+
     rows = db.execute(
-        text("""
+        text(f"""
             SELECT
                 r.recipe_id,
                 r.title,
+                r.category,
                 r.is_canonical,
                 COALESCE(SUM(f.trust_weight * rev.z_score), 0) AS trust_score,
+                COUNT(DISTINCT rev.review_id) AS review_count,
                 array_agg(DISTINCT u.username) FILTER (WHERE f.follower_id = :uid AND u.username IS NOT NULL) AS trusted_reviewers
             FROM recipes r
             LEFT JOIN reviews rev ON rev.recipe_id = r.recipe_id
             LEFT JOIN follows f ON f.followee_id = rev.user_id AND f.follower_id = :uid
             LEFT JOIN users u ON u.user_id = rev.user_id
             WHERE r.is_canonical = true
-            GROUP BY r.recipe_id, r.title, r.is_canonical
-            ORDER BY trust_score DESC
+              {category_clause}
+            GROUP BY r.recipe_id, r.title, r.category, r.is_canonical
+            ORDER BY trust_score DESC, review_count DESC
             LIMIT :limit OFFSET :offset
         """),
-        {"uid": user_id, "limit": limit, "offset": offset}
+        params
     ).fetchall()
 
     return [
         {
             "recipe_id": r.recipe_id,
             "title": r.title,
+            "category": r.category,
             "trust_score": round(r.trust_score, 4),
             "trusted_reviewers": r.trusted_reviewers or [],
             "is_canonical": r.is_canonical,

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from src.database import get_db
 
 router = APIRouter(tags=["recipes"])
@@ -11,12 +11,13 @@ router = APIRouter(tags=["recipes"])
 class IngestRequest(BaseModel):
     title: str
     ingredients: List[str]
+    category: Optional[str] = None
 
 
 @router.get("/recipes/{recipe_id}")
 def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
     recipe = db.execute(
-        text("SELECT recipe_id, title, instructions, is_canonical FROM recipes WHERE recipe_id = :id"),
+        text("SELECT recipe_id, title, instructions, is_canonical, category FROM recipes WHERE recipe_id = :id"),
         {"id": recipe_id}
     ).fetchone()
 
@@ -31,6 +32,7 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
     return {
         "recipe_id": recipe.recipe_id,
         "title": recipe.title,
+        "category": recipe.category,
         "ingredients": [f"{i.name} - {i.quantity}" for i in ingredients],
         "instructions": [s.strip() for s in recipe.instructions.split(".") if s.strip()] if recipe.instructions else [],
         "is_canonical": recipe.is_canonical,
@@ -39,7 +41,13 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 @router.post("/recipes/ingest")
 def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)):
-    incoming = {i.lower().strip() for i in body.ingredients}
+    if not body.title.strip():
+        raise HTTPException(422, "Title cannot be empty")
+
+    if not body.ingredients:
+        raise HTTPException(422, "Ingredients cannot be empty — please include at least one ingredient")
+
+    incoming = {i.lower().strip() for i in body.ingredients if i.strip()}
 
     # Check for duplicates using Jaccard similarity on ingredients
     existing_recipes = db.execute(
@@ -68,8 +76,12 @@ def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)):
 
     # No match — create a new recipe
     new_recipe = db.execute(
-        text("INSERT INTO recipes (title, instructions, is_canonical, confidence) VALUES (:title, '', true, 1.0) RETURNING recipe_id"),
-        {"title": body.title}
+        text("""
+            INSERT INTO recipes (title, instructions, is_canonical, confidence, category)
+            VALUES (:title, '', true, 1.0, :category)
+            RETURNING recipe_id
+        """),
+        {"title": body.title.strip(), "category": body.category}
     ).fetchone()
 
     for name in body.ingredients:
