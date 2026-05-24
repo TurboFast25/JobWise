@@ -13,3 +13,38 @@ Contributors
 Ethan Yang: eyang62@calpoly.edu
 Garrett Chan: gchan28@calpoly.edu
 Sherry Cao: scao18@calpoly.edu
+
+---
+
+## Local Development
+
+### Prerequisites
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
+- PostgreSQL database
+
+### Setup
+```bash
+uv sync
+cp .env.example .env   # set POSTGRES_URI (and optionally JWT_SECRET_KEY)
+uv run alembic upgrade head
+uv run uvicorn src.api.server:app --reload
+```
+
+API docs: http://localhost:8000/docs
+
+### Authentication
+Protected endpoints require a JWT from `POST /api/v1/auth/login`.
+
+Seeded users (password: `password123`): `diego_cooks`, `jennifer_eats`, `louis_chef`
+
+```bash
+# Login
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "jennifer_eats", "password": "password123"}'
+
+# Use token on protected routes
+curl http://localhost:8000/api/v1/feed \
+  -H "Authorization: Bearer <access_token>"
+```

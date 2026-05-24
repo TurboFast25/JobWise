@@ -1,36 +1,39 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+
+from src.api.db_helpers import atomic
+from src.api.deps import get_current_user_id
+from src.api.schemas import FollowRequest, StatusResponse
 from src.database import get_db
 
 router = APIRouter(tags=["social"])
 
 
-class FollowRequest(BaseModel):
-    followee_id: int
-
-
-@router.post("/social/follows")
-def follow_user(body: FollowRequest, user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
+@router.post("/social/follows", response_model=StatusResponse)
+def follow_user(
+    body: FollowRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> StatusResponse:
     if user_id == body.followee_id:
-        raise HTTPException(400, "You can't follow yourself")
+        raise HTTPException(status_code=400, detail="You can't follow yourself")
 
-    if not db.execute(text("SELECT 1 FROM users WHERE user_id = :id"), {"id": user_id}).fetchone():
-        raise HTTPException(404, "Your user account wasn't found")
+    with atomic(db):
+        result = db.execute(
+            text(
+                """
+                INSERT INTO follows (follower_id, followee_id, trust_weight)
+                SELECT :me, :them, 1.0
+                WHERE EXISTS (SELECT 1 FROM users WHERE user_id = :me)
+                  AND EXISTS (SELECT 1 FROM users WHERE user_id = :them)
+                RETURNING follow_id
+                """
+            ),
+            {"me": user_id, "them": body.followee_id},
+        ).fetchone()
 
-    if not db.execute(text("SELECT 1 FROM users WHERE user_id = :id"), {"id": body.followee_id}).fetchone():
-        raise HTTPException(404, "That user doesn't exist")
+    if result is None:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    if db.execute(
-        text("SELECT 1 FROM follows WHERE follower_id = :me AND followee_id = :them"),
-        {"me": user_id, "them": body.followee_id}
-    ).fetchone():
-        raise HTTPException(409, "You're already following this user")
-
-    db.execute(
-        text("INSERT INTO follows (follower_id, followee_id, trust_weight) VALUES (:me, :them, 1.0)"),
-        {"me": user_id, "them": body.followee_id}
-    )
-    db.commit()
-    return {"status": "following"}
+    return StatusResponse(status="following")

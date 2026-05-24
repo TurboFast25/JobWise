@@ -12,6 +12,8 @@ services:
     envVars:
       - key: POSTGRES_URI
         sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
       - key: API_KEY
         sync: false
       - key: PYTHON_VERSION
