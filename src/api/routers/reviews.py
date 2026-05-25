@@ -16,7 +16,11 @@ class ReviewRequest(BaseModel):
 
 @router.post("/reviews")
 def submit_review(body: ReviewRequest, user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
-    if not db.execute(text("SELECT 1 FROM users WHERE user_id = :id"), {"id": user_id}).fetchone():
+    # FOR UPDATE locks the user row for the duration of this transaction.
+    # Concurrent reviews for the same user block here until the first commits,
+    # so the trust_authority UPDATE subquery always runs against the full
+    # committed set of reviews rather than a partial snapshot.
+    if not db.execute(text("SELECT 1 FROM users WHERE user_id = :id FOR UPDATE"), {"id": user_id}).fetchone():
         raise HTTPException(404, "User not found")
 
     if not db.execute(text("SELECT 1 FROM recipes WHERE recipe_id = :id"), {"id": body.recipe_id}).fetchone():

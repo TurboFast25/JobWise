@@ -49,6 +49,11 @@ def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)):
 
     incoming = {i.lower().strip() for i in body.ingredients if i.strip()}
 
+    # SERIALIZABLE isolation prevents phantom reads: if two concurrent ingests both
+    # scan canonical recipes and find no match, PostgreSQL detects the read/write
+    # conflict and aborts one of them, forcing it to retry and see the other's insert.
+    db.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+
     # Check for duplicates using Jaccard similarity on ingredients
     existing_recipes = db.execute(
         text("""

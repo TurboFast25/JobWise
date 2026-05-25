@@ -25,15 +25,17 @@ def add_to_cookbook(body: CookbookRequest, user_id: int = Header(..., alias="use
     ).fetchone():
         raise HTTPException(409, "Already in your cookbook")
 
-    # personal_rank = next slot in the user's list
-    count = db.execute(
-        text("SELECT COUNT(*) AS cnt FROM cookbook_entries WHERE user_id = :uid"),
-        {"uid": user_id}
-    ).fetchone()
-
+    # Atomic INSERT...SELECT: COUNT(*) and the INSERT happen in one statement,
+    # so no concurrent transaction can slip in between the read and the write
+    # and claim the same personal_rank value.
     db.execute(
-        text("INSERT INTO cookbook_entries (user_id, recipe_id, personal_rank) VALUES (:uid, :rid, :rank)"),
-        {"uid": user_id, "rid": body.recipe_id, "rank": count.cnt + 1}
+        text("""
+            INSERT INTO cookbook_entries (user_id, recipe_id, personal_rank)
+            SELECT :uid, :rid, COUNT(*) + 1
+            FROM cookbook_entries
+            WHERE user_id = :uid
+        """),
+        {"uid": user_id, "rid": body.recipe_id}
     )
     db.commit()
     return {"status": "saved"}
