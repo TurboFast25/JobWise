@@ -14,8 +14,18 @@ class IngestRequest(BaseModel):
     category: Optional[str] = None
 
 
-@router.get("/recipes/{recipe_id}")
-def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/recipes/{recipe_id}",
+    status_code=200,
+    tags=["recipes"],
+    responses={
+        404: {"description": "Recipe not found"},
+    },
+)
+def get_recipe(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+):
     recipe = db.execute(
         text("SELECT recipe_id, title, instructions, is_canonical, category FROM recipes WHERE recipe_id = :id"),
         {"id": recipe_id}
@@ -38,8 +48,19 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
         "is_canonical": recipe.is_canonical,
     }
 
-@router.get("/recipes/{recipe_id}/similar")
-def get_similar_recipes(recipe_id: int, limit: int = 5, db: Session = Depends(get_db)):
+@router.get(
+    "/recipes/{recipe_id}/similar",
+    status_code=200,
+    tags=["recipes"],
+    responses={
+        404: {"description": "Recipe not found"},
+    },
+)
+def get_similar_recipes(
+    recipe_id: int,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+):
     target = db.execute(
         text("SELECT recipe_id FROM recipes WHERE recipe_id = :id"),
         {"id": recipe_id},
@@ -88,8 +109,18 @@ def get_similar_recipes(recipe_id: int, limit: int = 5, db: Session = Depends(ge
     results.sort(key=lambda r: r["similarity"], reverse=True)
     return results[:limit]
 
-@router.post("/recipes/ingest")
-def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)):
+@router.post(
+    "/recipes/ingest",
+    status_code=201,
+    tags=["recipes"],
+    responses={
+        422: {"description": "Invalid recipe submission"},
+    },
+)
+def ingest_recipe(
+    body: IngestRequest,
+    db: Session = Depends(get_db),
+):
     if not body.title.strip():
         raise HTTPException(422, "Title cannot be empty")
 

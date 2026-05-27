@@ -14,8 +14,21 @@ class ReviewRequest(BaseModel):
     comment: Optional[str] = None
 
 
-@router.post("/reviews")
-def submit_review(body: ReviewRequest, user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
+@router.post(
+    "/reviews",
+    status_code=201,
+    tags=["reviews"],
+    responses={
+        404: {"description": "User or recipe not found"},
+        409: {"description": "Recipe already reviewed"},
+        422: {"description": "Invalid review score"},
+    },
+)
+def submit_review(
+    body: ReviewRequest,
+    user_id: int = Header(..., alias="user-id"),
+    db: Session = Depends(get_db),
+):
     # FOR UPDATE locks the user row for the duration of this transaction.
     # Concurrent reviews for the same user block here until the first commits,
     # so the trust_authority UPDATE subquery always runs against the full

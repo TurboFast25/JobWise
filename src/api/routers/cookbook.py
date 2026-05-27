@@ -11,8 +11,20 @@ class CookbookRequest(BaseModel):
     recipe_id: int
 
 
-@router.post("/cookbook")
-def add_to_cookbook(body: CookbookRequest, user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
+@router.post(
+    "/cookbook",
+    status_code=201,
+    tags=["cookbook"],
+    responses={
+        404: {"description": "User or recipe not found"},
+        409: {"description": "Recipe already in cookbook"},
+    },
+)
+def add_to_cookbook(
+    body: CookbookRequest,
+    user_id: int = Header(..., alias="user-id"),
+    db: Session = Depends(get_db),
+):
     if not db.execute(text("SELECT 1 FROM users WHERE user_id = :id"), {"id": user_id}).fetchone():
         raise HTTPException(404, "User not found")
 
@@ -41,8 +53,15 @@ def add_to_cookbook(body: CookbookRequest, user_id: int = Header(..., alias="use
     return {"status": "saved"}
 
 
-@router.get("/cookbook")
-def get_cookbook(user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
+@router.get(
+    "/cookbook",
+    status_code=200,
+    tags=["cookbook"],
+)
+def get_cookbook(
+    user_id: int = Header(..., alias="user-id"),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
         text("""
             SELECT ce.recipe_id, ce.personal_rank, COALESCE(rev.z_score, 0.0) AS z_score

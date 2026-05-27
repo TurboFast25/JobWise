@@ -13,8 +13,19 @@ class CreateUserRequest(BaseModel):
     email: Optional[str] = None
 
 
-@router.post("/users", status_code=201)
-def create_user(body: CreateUserRequest, db: Session = Depends(get_db)):
+@router.post(
+    "/users",
+    status_code=201,
+    tags=["users"],
+    responses={
+        409: {"description": "Username or email already exists"},
+        422: {"description": "Invalid username"},
+    },
+)
+def create_user(
+    body: CreateUserRequest,
+    db: Session = Depends(get_db),
+):
     if not body.username.strip():
         raise HTTPException(422, "Username cannot be empty")
 
@@ -33,8 +44,18 @@ def create_user(body: CreateUserRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"user_id": user.user_id, "username": user.username, "trust_authority": user.trust_authority}
 
-@router.get("/users/{user_id}/taste-profile")
-def get_taste_profile(user_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/users/{user_id}/taste-profile",
+    status_code=200,
+    tags=["users"],
+    responses={
+        404: {"description": "User not found"},
+    },
+)
+def get_taste_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
     user = db.execute(
         text("SELECT user_id, username FROM users WHERE user_id = :id"),
         {"id": user_id},
@@ -117,8 +138,18 @@ def get_taste_profile(user_id: int, db: Session = Depends(get_db)):
         },
     }
 
-@router.get("/users/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/users/{user_id}",
+    status_code=200,
+    tags=["users"],
+    responses={
+        404: {"description": "User not found"},
+    },
+)
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
     user = db.execute(
         text("SELECT user_id, username, trust_authority FROM users WHERE user_id = :id"),
         {"id": user_id}

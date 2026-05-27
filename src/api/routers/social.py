@@ -11,8 +11,21 @@ class FollowRequest(BaseModel):
     followee_id: int
 
 
-@router.post("/social/follows")
-def follow_user(body: FollowRequest, user_id: int = Header(..., alias="user-id"), db: Session = Depends(get_db)):
+@router.post(
+    "/social/follows",
+    status_code=201,
+    tags=["social"],
+    responses={
+        400: {"description": "Cannot follow yourself"},
+        404: {"description": "User not found"},
+        409: {"description": "Already following user"},
+    },
+)
+def follow_user(
+    body: FollowRequest,
+    user_id: int = Header(..., alias="user-id"),
+    db: Session = Depends(get_db),
+):
     if user_id == body.followee_id:
         raise HTTPException(400, "You can't follow yourself")
 

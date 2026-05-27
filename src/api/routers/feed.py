@@ -7,7 +7,11 @@ from src.database import get_db
 router = APIRouter(tags=["feed"])
 
 
-@router.get("/feed")
+@router.get(
+    "/feed",
+    status_code=200,
+    tags=["feed"],
+)
 def get_feed(
     user_id: int = Header(..., alias="user-id"),
     limit: int = Query(20, ge=1, le=100),
