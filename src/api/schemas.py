@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -22,13 +23,24 @@ class FeedItemResponse(BaseModel):
     is_canonical: bool
 
 
+class IngredientItem(BaseModel):
+    name: str
+    quantity: Optional[str] = None
+
+
 class RecipeDetailResponse(BaseModel):
     recipe_id: int
     title: str
     category: Optional[str] = None
-    ingredients: list[str]
+    author_id: Optional[int] = None
+    ingredients: list[IngredientItem]
     instructions: list[str]
     is_canonical: bool
+
+
+class ReviewBody(BaseModel):
+    raw_score: float = Field(..., ge=0.0, le=10.0)
+    comment: Optional[str] = None
 
 
 class ReviewRequest(BaseModel):
@@ -53,6 +65,16 @@ class IngestRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Title cannot be empty")
+        return stripped
+
+    @field_validator("ingredients")
+    @classmethod
+    def ingredients_not_blank(cls, value: list[str]) -> list[str]:
+        stripped = [item.strip() for item in value if item.strip()]
+        if not stripped:
+            raise ValueError(
+                "Ingredients cannot be empty — please include at least one ingredient"
+            )
         return stripped
 
 
@@ -93,6 +115,14 @@ class CreateUserRequest(BaseModel):
 
 class FollowRequest(BaseModel):
     followee_id: int
+
+
+class FollowResponse(BaseModel):
+    follow_id: int
+    follower_id: int
+    followee_id: int
+    created_at: datetime
+    trust_weight: float = 1.0
 
 
 class CookbookRequest(BaseModel):

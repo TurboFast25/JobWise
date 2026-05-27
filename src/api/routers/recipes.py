@@ -3,8 +3,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.api.db_helpers import atomic
-from src.api.deps import get_current_user_id
-from src.api.schemas import IngestRequest, IngestResponse, RecipeDetailResponse, TrustBreakdownResponse, TrustedContribution
+from src.api.deps import get_current_user_id, get_optional_user_id
+from src.api.ingredient_helpers import link_recipe_ingredients
+from src.api.schemas import (
+    IngestRequest,
+    IngestResponse,
+    IngredientItem,
+    RecipeDetailResponse,
+    TrustBreakdownResponse,
+    TrustedContribution,
+)
+from src.api.sql_expressions import TRUST_WEIGHT_EXPR, USER_STATS_LATERAL, Z_SCORE_EXPR
 from src.database import get_db
 
 router = APIRouter(tags=["recipes"])
@@ -19,57 +28,63 @@ RECIPE_DETAIL_QUERY = """
         r.instructions,
         r.is_canonical,
         r.category,
+        r.author_id,
         COALESCE(
-            array_agg(i.name ORDER BY i.ingredient_id)
-            FILTER (WHERE i.ingredient_id IS NOT NULL),
+            array_agg(c.name ORDER BY c.ingredient_id)
+            FILTER (WHERE c.ingredient_id IS NOT NULL),
             ARRAY[]::varchar[]
         ) AS ingredient_names,
         COALESCE(
-            array_agg(i.quantity ORDER BY i.ingredient_id)
-            FILTER (WHERE i.ingredient_id IS NOT NULL),
+            array_agg(ri.quantity ORDER BY c.ingredient_id)
+            FILTER (WHERE c.ingredient_id IS NOT NULL),
             ARRAY[]::varchar[]
         ) AS ingredient_quantities
     FROM recipes r
-    LEFT JOIN ingredients i ON i.recipe_id = r.recipe_id
+    LEFT JOIN recipe_ingredients ri ON ri.recipe_id = r.recipe_id
+    LEFT JOIN ingredient_catalog c ON c.ingredient_id = ri.ingredient_id
     WHERE r.recipe_id = :id
-    GROUP BY r.recipe_id, r.title, r.instructions, r.is_canonical, r.category
+    GROUP BY r.recipe_id, r.title, r.instructions, r.is_canonical, r.category, r.author_id
 """
 
 CANDIDATE_RECIPES_QUERY = """
-    SELECT r.recipe_id, array_agg(i.name) AS ingredients
+    SELECT r.recipe_id, array_agg(c.name) AS ingredients
     FROM recipes r
-    JOIN ingredients i ON i.recipe_id = r.recipe_id
+    JOIN recipe_ingredients ri ON ri.recipe_id = r.recipe_id
+    JOIN ingredient_catalog c ON c.ingredient_id = ri.ingredient_id
     WHERE r.is_canonical = true
       AND r.recipe_id IN (
-          SELECT DISTINCT i2.recipe_id
-          FROM ingredients i2
-          WHERE lower(trim(i2.name)) = ANY(:incoming_names)
+          SELECT DISTINCT ri2.recipe_id
+          FROM recipe_ingredients ri2
+          JOIN ingredient_catalog c2 ON c2.ingredient_id = ri2.ingredient_id
+          WHERE lower(trim(c2.name)) = ANY(:incoming_names)
       )
     GROUP BY r.recipe_id
 """
 
-TRUST_BREAKDOWN_QUERY = """
+TRUST_BREAKDOWN_QUERY = f"""
     SELECT
         r.recipe_id,
         r.title,
-        COALESCE(SUM(f.trust_weight * rev.z_score), 0) AS trust_score,
+        COALESCE(SUM({TRUST_WEIGHT_EXPR} * ({Z_SCORE_EXPR})), 0) AS trust_score,
         COUNT(DISTINCT rev.review_id) AS review_count,
         AVG(rev.raw_score) AS global_average_raw_score
     FROM recipes r
     LEFT JOIN reviews rev ON rev.recipe_id = r.recipe_id
+    {USER_STATS_LATERAL}
     LEFT JOIN follows f ON f.followee_id = rev.user_id AND f.follower_id = :uid
     WHERE r.recipe_id = :rid
     GROUP BY r.recipe_id, r.title
 """
 
-TRUSTED_CONTRIBUTIONS_QUERY = """
+TRUSTED_CONTRIBUTIONS_QUERY = f"""
     SELECT
         u.username,
         rev.raw_score,
-        rev.z_score,
-        f.trust_weight,
-        f.trust_weight * rev.z_score AS weighted_contribution
+        ({Z_SCORE_EXPR}) AS z_score,
+        {TRUST_WEIGHT_EXPR} AS trust_weight,
+        {TRUST_WEIGHT_EXPR} * ({Z_SCORE_EXPR}) AS weighted_contribution
     FROM reviews rev
+    {USER_STATS_LATERAL}
     JOIN follows f ON f.followee_id = rev.user_id AND f.follower_id = :uid
     JOIN users u ON u.user_id = rev.user_id
     WHERE rev.recipe_id = :rid
@@ -99,14 +114,17 @@ def _jaccard_score(incoming: set[str], existing: set[str]) -> float:
     return len(incoming & existing) / len(union)
 
 
-def _format_ingredient(name: str, quantity: str) -> str:
-    return f"{name} - {quantity}" if quantity else name
-
-
 def _parse_instructions(raw_instructions: str | None) -> list[str]:
     if not raw_instructions:
         return []
     return [step.strip() for step in raw_instructions.split(".") if step.strip()]
+
+
+def _build_ingredient_items(names: list, quantities: list) -> list[IngredientItem]:
+    return [
+        IngredientItem(name=name, quantity=quantity or None)
+        for name, quantity in zip(names, quantities)
+    ]
 
 
 @router.get("/recipes/{recipe_id}", response_model=RecipeDetailResponse)
@@ -120,10 +138,8 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)) -> RecipeDetailRes
         recipe_id=row.recipe_id,
         title=row.title,
         category=row.category,
-        ingredients=[
-            _format_ingredient(name, quantity)
-            for name, quantity in zip(row.ingredient_names, row.ingredient_quantities)
-        ],
+        author_id=row.author_id,
+        ingredients=_build_ingredient_items(row.ingredient_names, row.ingredient_quantities),
         instructions=_parse_instructions(row.instructions),
         is_canonical=row.is_canonical,
     )
@@ -178,13 +194,12 @@ def get_trust_breakdown(
 
 
 @router.post("/recipes/ingest", response_model=IngestResponse)
-def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)) -> IngestResponse:
+def ingest_recipe(
+    body: IngestRequest,
+    user_id: int | None = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+) -> IngestResponse:
     incoming = _normalize_ingredients(body.ingredients)
-    if not incoming:
-        raise HTTPException(
-            status_code=422,
-            detail="Ingredients cannot be empty — please include at least one ingredient",
-        )
 
     candidate_rows = db.execute(
         text(CANDIDATE_RECIPES_QUERY),
@@ -202,6 +217,16 @@ def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)) -> IngestR
             best_match = row.recipe_id
 
     if best_score >= JACCARD_THRESHOLD and best_match is not None:
+        with atomic(db):
+            db.execute(
+                text(
+                    """
+                    INSERT INTO recipe_merges (canonical_recipe_id, source_recipe_id, confidence)
+                    VALUES (:canonical_id, NULL, :confidence)
+                    """
+                ),
+                {"canonical_id": best_match, "confidence": round(best_score, 3)},
+            )
         return IngestResponse(
             status="duplicate_detected",
             canonical_id=best_match,
@@ -209,28 +234,22 @@ def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)) -> IngestR
             message=DUPLICATE_MESSAGE,
         )
 
-    stripped_ingredients = [item.strip() for item in body.ingredients if item.strip()]
-
     with atomic(db):
         new_recipe = db.execute(
             text(
                 """
-                INSERT INTO recipes (title, instructions, is_canonical, confidence, category)
-                VALUES (:title, '', true, 1.0, :category)
+                INSERT INTO recipes (title, instructions, is_canonical, category, author_id)
+                VALUES (:title, '', true, :category, :author_id)
                 RETURNING recipe_id
                 """
             ),
-            {"title": body.title, "category": body.category},
+            {"title": body.title, "category": body.category, "author_id": user_id},
         ).fetchone()
 
         if new_recipe is None:
             raise HTTPException(status_code=500, detail="Failed to create recipe")
 
-        for name in stripped_ingredients:
-            db.execute(
-                text("INSERT INTO ingredients (recipe_id, name, quantity) VALUES (:rid, :name, '')"),
-                {"rid": new_recipe.recipe_id, "name": name},
-            )
+        link_recipe_ingredients(db, new_recipe.recipe_id, body.ingredients)
 
     return IngestResponse(
         status="created",

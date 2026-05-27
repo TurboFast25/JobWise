@@ -12,9 +12,22 @@ from src.api.schemas import (
     CookbookResponse,
     StatusResponse,
 )
+from src.api.sql_expressions import USER_STATS_LATERAL, Z_SCORE_EXPR
 from src.database import get_db
 
 router = APIRouter(tags=["cookbook"])
+
+COOKBOOK_QUERY = f"""
+    SELECT
+        ce.recipe_id,
+        ce.personal_rank,
+        COALESCE(({Z_SCORE_EXPR}), 0.0) AS z_score
+    FROM cookbook_entries ce
+    LEFT JOIN reviews rev ON rev.recipe_id = ce.recipe_id AND rev.user_id = :uid
+    {USER_STATS_LATERAL}
+    WHERE ce.user_id = :uid
+    ORDER BY ce.personal_rank
+"""
 
 
 def _validate_rankings(
@@ -130,18 +143,7 @@ def get_cookbook(
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ) -> CookbookResponse:
-    rows = db.execute(
-        text(
-            """
-            SELECT ce.recipe_id, ce.personal_rank, COALESCE(rev.z_score, 0.0) AS z_score
-            FROM cookbook_entries ce
-            LEFT JOIN reviews rev ON rev.recipe_id = ce.recipe_id AND rev.user_id = :uid
-            WHERE ce.user_id = :uid
-            ORDER BY ce.personal_rank
-            """
-        ),
-        {"uid": user_id},
-    ).fetchall()
+    rows = db.execute(text(COOKBOOK_QUERY), {"uid": user_id}).fetchall()
 
     return CookbookResponse(
         user_rankings=[

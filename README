@@ -33,6 +33,8 @@ uv run uvicorn src.api.server:app --reload
 
 API docs: http://localhost:8000/docs
 
+Manual test guide: `v3_manual_test_results.md` (matches `Docs/ExampleFlows.md` seed IDs).
+
 ### Authentication
 Protected endpoints require a JWT from `POST /api/v1/auth/login`.
 

@@ -18,8 +18,13 @@ def map_integrity_error(error: IntegrityError) -> HTTPException:
     constraint = _constraint_name(error)
 
     if pgcode == "23505":
-        if constraint == "uq_cookbook_entry":
+        if constraint in ("uq_cookbook_entry",):
             return HTTPException(status_code=409, detail="Already in your cookbook")
+        if constraint == "uq_cookbook_user_rank":
+            return HTTPException(
+                status_code=409,
+                detail="Duplicate rank detected — please assign a unique rank to each recipe",
+            )
         if constraint == "uq_user_recipe_review":
             return HTTPException(status_code=409, detail="You've already reviewed this recipe")
         if constraint == "uq_follow":
