@@ -1,58 +1,7 @@
 # API Specification
 
 **Base URL**: `/api/v1`  
-**Content-Type**: `application/json`  
-**Authentication**: Protected endpoints require `Authorization: Bearer <JWT>` from `POST /auth/login`. Passwords are stored as bcrypt hashes on `users` (not a separate credentials table). For manual testing, a validated `user-id` header is also accepted; unknown IDs return **404 User not found**.
-
-**Cookbook scope**: `GET/POST /cookbook` operate on the **authenticated user's** cookbook (no `{user_id}` in the path).
-
----
-
-## Authentication
-
-### Login
-- **Method**: `POST`
-- **Path**: `/auth/login`
-- **Description**: Authenticates a user and returns a JWT access token.
-
-**Request**
-```json
-{
-  "username": "string",
-  "password": "string"
-}
-```
-
-**Response**
-```json
-{
-  "access_token": "string",
-  "token_type": "bearer"
-}
-```
-
-### Create User
-- **Method**: `POST`
-- **Path**: `/users`
-- **Description**: Registers a new user account.
-
-**Request**
-```json
-{
-  "username": "string",
-  "email": "string (optional)",
-  "password": "string (min 8 characters)"
-}
-```
-
-**Response**
-```json
-{
-  "user_id": "integer",
-  "username": "string",
-  "trust_authority": "number"
-}
-```
+**Content-Type**: `application/json`
 
 ---
 
@@ -66,8 +15,7 @@ The API calls are made in this sequence when a user discovers and reviews a reci
 
 ### 1.1 Get Discovery Feed
 - **Method**: `GET`
-- **Path**: `/feed` or `/recipes/feed`
-- **Auth**: Required
+- **Path**: `/feed`
 - **Description**: Retrieves recipes ranked by Trust Weight.  
   Score formula:  
   Score_R = sum of (Trust between user u and user v multiplied by the normalized rating that user v gave to recipe R)
@@ -81,13 +29,11 @@ The API calls are made in this sequence when a user discovers and reviews a reci
 ```json
 [
   {
-    "recipe_id": "integer",
+    "recipe_id": "integer", /* unique recipe id */
     "title": "string",
-    "category": "string",
-    "trust_score": "number",
-    "review_count": "integer",
+    "trust_score": "number", /* unique recipe id */
     "trusted_reviewers": ["string"],
-    "is_canonical": "boolean"
+    "is_canonical": boolean
   }
 ]
 ```
@@ -99,150 +45,111 @@ The API calls are made in this sequence when a user discovers and reviews a reci
 
 - **Response**
 ```json
+
 {
   "recipe_id": "integer",
   "title": "string",
-  "category": "string",
-  "author_id": "integer | null",
-  "ingredients": [
-    { "name": "string", "quantity": "string | null" }
-  ],
+  "ingredients": ["string"],
   "instructions": ["string"],
   "is_canonical": "boolean"
 }
 ```
 
-### 1.2.1 Get Recipe Trust Breakdown
-- **Method**: `GET`
-- **Path**: `/recipes/{id}/trust_breakdown`
-- **Auth**: Required
-- **Description**: Explains why a recipe has its trust score for the authenticated user.  
-  Trust score = sum of (`trust_weight` × `z_score`) for each followed user who reviewed the recipe.
-
-- **Response**
-```json
-{
-  "recipe_id": "integer",
-  "title": "string",
-  "trust_score": "number",
-  "review_count": "integer",
-  "global_average_raw_score": "number | null",
-  "trusted_contributions": [
-    {
-      "username": "string",
-      "raw_score": "number",
-      "z_score": "number",
-      "trust_weight": "number",
-      "weighted_contribution": "number"
-    }
-  ],
-  "non_trusted_review_count": "integer"
-}
-```
-
 ### 1.3 Submit Review
 - **Method**: `POST`
-- **Path**: `/recipes/{recipe_id}/reviews` (preferred) or `/reviews` (legacy)
-- **Auth**: Required
-- **Description**: Submits a review. `z_score` is computed from the user's rating history at submit time (not stored).
+- **Path**: `/reviews`
+- **Description**: Submits a review and calculates normalized Z-score
 
-**Request** (`/recipes/{recipe_id}/reviews`)
-```json
-{
-  "raw_score": "number (0.0 - 10.0)",
-  "comment": "string"
-}
-```
-
-**Legacy request** (`/reviews`)
-```json
-{
-  "recipe_id": "integer",
-  "raw_score": "number (0.0 - 10.0)",
-  "comment": "string"
-}
-```
-
-- **Response**
-```json
-{
-  "review_id": "integer",
-  "z_score": "number"
-}
-```
-
-### 1.4 Ingest Recipe
-- **Method**: `POST`
-- **Path**: `/recipes/ingest`
-- **Description**: Detects duplicate canonical recipes via Jaccard similarity on ingredient names (case-insensitive).
-
-**Behavior**
-- **Threshold**: merge when similarity ≥ `0.5`
-- **`duplicate_detected`**: no new recipe row; returns existing `canonical_id`; logs row in `recipe_merges`
-- **`created`**: new canonical recipe + links ingredients through `ingredient_catalog` / `recipe_ingredients`
-- **Reviews**: existing reviews stay on the canonical recipe; duplicates are not auto-merged
-- **Auth**: optional JWT sets `author_id` on new recipes
-- **Validation**: empty or whitespace-only ingredient strings are rejected (422)
 
 - **Request**
 ```json
 {
-  "title": "string",
-  "ingredients": ["string"],
-  "category": "string (optional)"
+  "recipe_id": "integer",
+  "raw_score": "number, /* 0.0 - 10.0 */
+  "comment": "string."
 }
 ```
 
 - **Response**
+
 ```json
 {
-  "status": "string (created | duplicate_detected)",
-  "canonical_id": "integer",
-  "confidence": "number",
-  "message": "string (optional, present when duplicate_detected)"
+  "review_id": "integer",
+  "z_score": "number, /* normalized rating */
 }
+
+```
+
+### 1.4 Ingest Recipe
+- **Method**: POST
+- **Path**: /recipes/ingest
+- **Description**: Detects duplicates via ingredient similarity
+
+
+- **Request**
+
+```json
+{
+  "title": "string", 
+  "ingredients": ["string"] 
+}
+
+```
+
+- **Response**
+
+```json
+{
+  "status": "string", /* created or merged */
+  "canonical_id": "integer",
+  "confidence": "number" //* similarity score */
+}
+
 ```
 
 ## Trust Network
 
 The API calls are made in this sequence when a user builds their trust network:
 1. `Get User Profile`
-2. `Follow User`
+2. `Follower User`
 
 ### 2.1 Get User Profile
-- **Method**: `GET`
-- **Path**: `/users/{id}`
+- **Method**: GET
+- **Path**: /users/{id}
+
 
 - **Response**
+
 ```json
 {
   "user_id": "integer",
   "username": "string",
-  "trust_authority": "number (computed at read time)"
+  "trust_authority": "number" /* influence score */
 }
+
 ```
 
 ### 2.2 Follow User
-- **Method**: `POST`
-- **Path**: `/follows` or `/social/follows`
-- **Auth**: Required
+- **Method**: POST
+- **Path**: /social/follows
+
 
 - **Request**
+
 ```json
 {
   "followee_id": "integer"
 }
+
 ```
 
 - **Response**
+
 ```json
 {
-  "follow_id": "integer",
-  "follower_id": "integer",
-  "followee_id": "integer",
-  "created_at": "datetime",
-  "trust_weight": 1.0
+  "status": "string"
 }
+
 ```
 
 ## Personal Cookbook
@@ -250,31 +157,34 @@ The API calls are made in this sequence when a user builds their trust network:
 The API calls are made in this sequence when a user manages their saved recipes:
 1. `Add to Cookbook`
 2. `View Cookbook`
-3. `Reorder Cookbook`
 
 ### 3.1 Add to Cookbook
-- **Method**: `POST`
-- **Path**: `/cookbook`
-- **Auth**: Required
+
+- **Method**: POST
+- **Path**: /cookbook
 
 - **Request**
+
 ```json
 {
   "recipe_id": "integer"
 }
+
 ```
 
 - **Response**
+
 ```json
 {
   "status": "string"
 }
+
 ```
 
 ### 3.2 View Cookbook
+
 - **Method**: `GET`
 - **Path**: `/cookbook`
-- **Auth**: Required
 
 - **Response**
 ```json
@@ -287,27 +197,92 @@ The API calls are made in this sequence when a user manages their saved recipes:
     }
   ]
 }
+
+## Complex Endpoints
+
+---
+
+### 4.1 Get Similar Recipes
+
+- **Method**: `GET`
+- **Path**: `/recipes/{recipe_id}/similar`
+- **Description**: Returns recipes similar to the selected recipe using ingredient-overlap similarity.
+
+#### Query Params
+- `limit` (int, optional, default: 5)
+
+#### Complex Logic
+- Loads the target recipe’s ingredients
+- Loads other canonical recipes and their ingredients
+- Computes Jaccard similarity between ingredient sets
+- Ranks recipes by similarity score
+- Returns shared ingredients for explainability
+
+#### Response
+
+```json
+[
+  {
+    "recipe_id": 3,
+    "title": "Classic Tomato Sauce",
+    "similarity": 0.8,
+    "shared_ingredients": [
+      "garlic",
+      "olive oil",
+      "fresh basil"
+    ]
+  }
+]
 ```
 
-### 3.3 Reorder Cookbook
-- **Method**: `PUT`
-- **Path**: `/cookbook/rankings`
-- **Auth**: Required
-- **Description**: Replaces the user's full cookbook ranking order. Every saved recipe must appear exactly once with a unique, contiguous rank starting at 1.
+---
 
-- **Request**
+### 4.2 Get User Taste Profile
+
+- **Method**: `GET`
+- **Path**: `/users/{user_id}/taste-profile`
+- **Description**: Builds an analytics profile from a user’s recipe reviews.
+
+#### Complex Logic
+- Joins reviews with recipes
+- Groups reviews by recipe category
+- Computes average score and average z-score per category
+- Determines favorite and least favorite categories
+- Finds the user’s strongest positive and negative recipe preferences
+
+#### Response
+
 ```json
 {
-  "rankings": [
-    {"recipe_id": "integer", "personal_rank": "integer"},
-    {"recipe_id": "integer", "personal_rank": "integer"}
-  ]
+  "user_id": 2,
+  "username": "jennifer_eats",
+  "review_count": 6,
+  "average_score": 7.8,
+  "favorite_category": "Italian",
+  "least_favorite_category": "Dessert",
+  "category_breakdown": [
+    {
+      "category": "Italian",
+      "review_count": 3,
+      "average_score": 9.0,
+      "average_z_score": 1.8
+    },
+    {
+      "category": "Dessert",
+      "review_count": 2,
+      "average_score": 5.5,
+      "average_z_score": -1.2
+    }
+  ],
+  "most_positive_recipe": {
+    "recipe_id": 4,
+    "title": "Miso Carbonara",
+    "z_score": 2.4
+  },
+  "most_negative_recipe": {
+    "recipe_id": 7,
+    "title": "Burnt Cheesecake",
+    "z_score": -2.1
+  }
 }
 ```
-
-- **Response** — same shape as `GET /cookbook`
-
-- **Errors**
-  - `409` — duplicate `personal_rank` values
-  - `422` — ranks not contiguous, or rankings do not match the user's full cookbook
-  - `404` — recipe ID not in the user's cookbook
