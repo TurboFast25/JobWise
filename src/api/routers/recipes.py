@@ -38,6 +38,55 @@ def get_recipe(recipe_id: int, db: Session = Depends(get_db)):
         "is_canonical": recipe.is_canonical,
     }
 
+@router.get("/recipes/{recipe_id}/similar")
+def get_similar_recipes(recipe_id: int, limit: int = 5, db: Session = Depends(get_db)):
+    target = db.execute(
+        text("SELECT recipe_id FROM recipes WHERE recipe_id = :id"),
+        {"id": recipe_id},
+    ).fetchone()
+
+    if not target:
+        raise HTTPException(404, "Recipe not found")
+
+    target_ingredients = db.execute(
+        text("SELECT LOWER(TRIM(name)) AS name FROM ingredients WHERE recipe_id = :id"),
+        {"id": recipe_id},
+    ).fetchall()
+
+    target_set = {row.name for row in target_ingredients if row.name}
+
+    if not target_set:
+        return []
+
+    candidates = db.execute(
+        text("""
+            SELECT r.recipe_id, r.title, array_agg(LOWER(TRIM(i.name))) AS ingredients
+            FROM recipes r
+            JOIN ingredients i ON i.recipe_id = r.recipe_id
+            WHERE r.recipe_id != :id
+              AND r.is_canonical = true
+            GROUP BY r.recipe_id, r.title
+        """),
+        {"id": recipe_id},
+    ).fetchall()
+
+    results = []
+
+    for row in candidates:
+        candidate_set = {name for name in row.ingredients if name}
+        union = target_set | candidate_set
+        similarity = len(target_set & candidate_set) / len(union) if union else 0.0
+
+        if similarity > 0:
+            results.append({
+                "recipe_id": row.recipe_id,
+                "title": row.title,
+                "similarity": round(similarity, 4),
+                "shared_ingredients": sorted(target_set & candidate_set),
+            })
+
+    results.sort(key=lambda r: r["similarity"], reverse=True)
+    return results[:limit]
 
 @router.post("/recipes/ingest")
 def ingest_recipe(body: IngestRequest, db: Session = Depends(get_db)):
