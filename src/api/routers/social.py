@@ -42,7 +42,7 @@ def follow_user(
         raise HTTPException(409, "You're already following this user")
 
     db.execute(
-        text("INSERT INTO follows (follower_id, followee_id, trust_weight) VALUES (:me, :them, 1.0)"),
+        text("INSERT INTO follows (follower_id, followee_id) VALUES (:me, :them)"),
         {"me": user_id, "them": body.followee_id}
     )
     db.commit()
