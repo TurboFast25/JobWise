@@ -58,18 +58,12 @@ def submit_review(
 
     review = db.execute(
         text("""
-            INSERT INTO reviews (user_id, recipe_id, raw_score, z_score, comment)
-            VALUES (:uid, :rid, :raw, :z, :comment)
-            RETURNING review_id, z_score
+            INSERT INTO reviews (user_id, recipe_id, raw_score, comment)
+            VALUES (:uid, :rid, :raw, :comment)
+            RETURNING review_id
         """),
-        {"uid": user_id, "rid": body.recipe_id, "raw": body.raw_score, "z": z, "comment": body.comment}
+        {"uid": user_id, "rid": body.recipe_id, "raw": body.raw_score, "comment": body.comment}
     ).fetchone()
 
-    # Bump trust_authority based on how opinionated the user's ratings are
-    db.execute(
-        text("UPDATE users SET trust_authority = (SELECT AVG(ABS(z_score)) FROM reviews WHERE user_id = :uid) WHERE user_id = :uid"),
-        {"uid": user_id}
-    )
-
     db.commit()
-    return {"review_id": review.review_id, "z_score": round(review.z_score, 4)}
+    return {"review_id": review.review_id, "z_score": round(z, 4)}

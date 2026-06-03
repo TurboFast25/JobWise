@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from src.database import get_db
+from src.api.sql_expressions import TRUST_AUTHORITY_SUBQUERY, Z_SCORE_EXPR, USER_STATS_LATERAL
 
 router = APIRouter(tags=["users"])
 
@@ -37,12 +38,12 @@ def create_user(
             raise HTTPException(409, "Email is already registered")
 
     user = db.execute(
-        text("INSERT INTO users (username, email, trust_authority) VALUES (:u, :e, 0.0) RETURNING user_id, username, trust_authority"),
+        text("INSERT INTO users (username, email) VALUES (:u, :e) RETURNING user_id, username"),
         {"u": body.username.strip(), "e": body.email}
     ).fetchone()
 
     db.commit()
-    return {"user_id": user.user_id, "username": user.username, "trust_authority": user.trust_authority}
+    return {"user_id": user.user_id, "username": user.username, "trust_authority": 0.0}
 
 @router.get(
     "/users/{user_id}/taste-profile",
@@ -65,15 +66,16 @@ def get_taste_profile(
         raise HTTPException(404, "User not found")
 
     rows = db.execute(
-        text("""
+        text(f"""
             SELECT
                 r.recipe_id,
                 r.title,
                 COALESCE(r.category, 'Uncategorized') AS category,
                 rev.raw_score,
-                rev.z_score
+                ({Z_SCORE_EXPR}) AS z_score
             FROM reviews rev
             JOIN recipes r ON r.recipe_id = rev.recipe_id
+            {USER_STATS_LATERAL}
             WHERE rev.user_id = :uid
         """),
         {"uid": user_id},
@@ -151,7 +153,7 @@ def get_user(
     db: Session = Depends(get_db),
 ):
     user = db.execute(
-        text("SELECT user_id, username, trust_authority FROM users WHERE user_id = :id"),
+        text(f"SELECT u.user_id, u.username, {TRUST_AUTHORITY_SUBQUERY} AS trust_authority FROM users u WHERE u.user_id = :id"),
         {"id": user_id}
     ).fetchone()
 

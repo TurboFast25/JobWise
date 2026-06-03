@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
 from src.database import get_db
+from src.api.sql_expressions import Z_SCORE_EXPR, USER_STATS_LATERAL
 
 router = APIRouter(tags=["feed"])
 
@@ -19,9 +20,10 @@ def get_feed(
     category: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    # Trust score = sum of (trust_weight * z_score) for everyone you follow who reviewed the recipe.
-    # Secondary sort by total review count so that when trust scores are all 0 (new user with no follows),
-    # more popular recipes still bubble up instead of returning in random order.
+    # Trust score = sum of z_scores for followed reviewers (trust_weight is always 1.0,
+    # stored as a computed constant rather than a persisted column).
+    # Secondary sort by total review count so that when trust scores are all 0 (new user
+    # with no follows), more popular recipes still bubble up.
     category_clause = "AND LOWER(r.category) = LOWER(:category)" if category else ""
     params = {"uid": user_id, "limit": limit, "offset": offset}
     if category:
@@ -34,11 +36,12 @@ def get_feed(
                 r.title,
                 r.category,
                 r.is_canonical,
-                COALESCE(SUM(f.trust_weight * rev.z_score), 0) AS trust_score,
+                COALESCE(SUM(CASE WHEN f.followee_id IS NOT NULL THEN ({Z_SCORE_EXPR}) END), 0) AS trust_score,
                 COUNT(DISTINCT rev.review_id) AS review_count,
                 array_agg(DISTINCT u.username) FILTER (WHERE f.follower_id = :uid AND u.username IS NOT NULL) AS trusted_reviewers
             FROM recipes r
             LEFT JOIN reviews rev ON rev.recipe_id = r.recipe_id
+            {USER_STATS_LATERAL}
             LEFT JOIN follows f ON f.followee_id = rev.user_id AND f.follower_id = :uid
             LEFT JOIN users u ON u.user_id = rev.user_id
             WHERE r.is_canonical = true

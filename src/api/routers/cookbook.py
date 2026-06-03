@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from src.database import get_db
+from src.api.sql_expressions import Z_SCORE_EXPR, USER_STATS_LATERAL
 
 router = APIRouter(tags=["cookbook"])
 
@@ -63,10 +64,12 @@ def get_cookbook(
     db: Session = Depends(get_db),
 ):
     rows = db.execute(
-        text("""
-            SELECT ce.recipe_id, ce.personal_rank, COALESCE(rev.z_score, 0.0) AS z_score
+        text(f"""
+            SELECT ce.recipe_id, ce.personal_rank,
+                COALESCE(({Z_SCORE_EXPR}), 0.0) AS z_score
             FROM cookbook_entries ce
             LEFT JOIN reviews rev ON rev.recipe_id = ce.recipe_id AND rev.user_id = :uid
+            {USER_STATS_LATERAL}
             WHERE ce.user_id = :uid
             ORDER BY ce.personal_rank
         """),

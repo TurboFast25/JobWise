@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from src.database import get_db
+from src.api.ingredient_helpers import link_recipe_ingredients
 
 router = APIRouter(tags=["recipes"])
 
@@ -35,7 +36,13 @@ def get_recipe(
         raise HTTPException(404, "Recipe not found")
 
     ingredients = db.execute(
-        text("SELECT name, quantity FROM ingredients WHERE recipe_id = :id ORDER BY ingredient_id"),
+        text("""
+            SELECT ic.name, ri.quantity
+            FROM recipe_ingredients ri
+            JOIN ingredient_catalog ic ON ic.ingredient_id = ri.ingredient_id
+            WHERE ri.recipe_id = :id
+            ORDER BY ri.ingredient_id
+        """),
         {"id": recipe_id}
     ).fetchall()
 
@@ -70,7 +77,12 @@ def get_similar_recipes(
         raise HTTPException(404, "Recipe not found")
 
     target_ingredients = db.execute(
-        text("SELECT LOWER(TRIM(name)) AS name FROM ingredients WHERE recipe_id = :id"),
+        text("""
+            SELECT LOWER(TRIM(ic.name)) AS name
+            FROM recipe_ingredients ri
+            JOIN ingredient_catalog ic ON ic.ingredient_id = ri.ingredient_id
+            WHERE ri.recipe_id = :id
+        """),
         {"id": recipe_id},
     ).fetchall()
 
@@ -81,9 +93,10 @@ def get_similar_recipes(
 
     candidates = db.execute(
         text("""
-            SELECT r.recipe_id, r.title, array_agg(LOWER(TRIM(i.name))) AS ingredients
+            SELECT r.recipe_id, r.title, array_agg(LOWER(TRIM(ic.name))) AS ingredients
             FROM recipes r
-            JOIN ingredients i ON i.recipe_id = r.recipe_id
+            JOIN recipe_ingredients ri ON ri.recipe_id = r.recipe_id
+            JOIN ingredient_catalog ic ON ic.ingredient_id = ri.ingredient_id
             WHERE r.recipe_id != :id
               AND r.is_canonical = true
             GROUP BY r.recipe_id, r.title
@@ -137,9 +150,10 @@ def ingest_recipe(
     # Check for duplicates using Jaccard similarity on ingredients
     existing_recipes = db.execute(
         text("""
-            SELECT r.recipe_id, array_agg(i.name) AS ingredients
+            SELECT r.recipe_id, array_agg(ic.name) AS ingredients
             FROM recipes r
-            JOIN ingredients i ON i.recipe_id = r.recipe_id
+            JOIN recipe_ingredients ri ON ri.recipe_id = r.recipe_id
+            JOIN ingredient_catalog ic ON ic.ingredient_id = ri.ingredient_id
             WHERE r.is_canonical = true
             GROUP BY r.recipe_id
         """)
@@ -162,18 +176,14 @@ def ingest_recipe(
     # No match — create a new recipe
     new_recipe = db.execute(
         text("""
-            INSERT INTO recipes (title, instructions, is_canonical, confidence, category)
-            VALUES (:title, '', true, 1.0, :category)
+            INSERT INTO recipes (title, instructions, is_canonical, category)
+            VALUES (:title, '', true, :category)
             RETURNING recipe_id
         """),
         {"title": body.title.strip(), "category": body.category}
     ).fetchone()
 
-    for name in body.ingredients:
-        db.execute(
-            text("INSERT INTO ingredients (recipe_id, name, quantity) VALUES (:rid, :name, '')"),
-            {"rid": new_recipe.recipe_id, "name": name.strip()}
-        )
+    link_recipe_ingredients(db, new_recipe.recipe_id, body.ingredients)
 
     db.commit()
     return {"status": "created", "canonical_id": new_recipe.recipe_id, "confidence": 1.0}
